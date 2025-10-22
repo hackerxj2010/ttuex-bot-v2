@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+venv/
+.pytest_cache/
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Sensitive files
+.env
+accounts.json
+
+# Playwright artifacts
+screenshots/
+debug_*.html

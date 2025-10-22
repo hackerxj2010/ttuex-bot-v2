@@ -1,0 +1,80 @@
+# Conception d'un Workflow d'Automatisation de Copy Trading TTUEX Optimisé pour Faibles Ressources
+
+## Contexte et Objectif
+
+Nous souhaitons développer un workflow d'automatisation de copy trading pour la plateforme TTUEX. L'objectif principal est de garantir une exécution **extrêmement rapide et fiable** sur un environnement matériel contraint (4GB de RAM, processeur Intel Celeron), tout en traitant efficacement un nombre potentiellement élevé de comptes. L'ingénieur logiciel devra concevoir et implémenter ce workflow en tenant compte de ces limitations strictes de ressources.
+
+## Problématique Actuelle (et pourquoi l'optimisation est cruciale)
+
+L'automatisation web, notamment avec des outils comme Playwright, peut être gourmande en ressources. Lancer un navigateur Chromium pour chaque compte ou maintenir de multiples instances de navigateur ouvertes simultanément sur une machine à faibles ressources mènera inévitablement à des ralentissements, des plantages et une instabilité. Notre défi est de minimiser l'empreinte mémoire et CPU à chaque étape du processus.
+
+## Principes Directeurs pour l'Ingénieur
+
+1.  **Minimisation de l'Empreinte Navigateur** : Le navigateur est le composant le plus lourd. Son utilisation doit être gérée avec une extrême parcimonie.
+2.  **Traitement Séquentiel et par Lots Intelligents** : Éviter le parallélisme excessif. Privilégier des lots de traitement où les ressources sont réinitialisées entre chaque lot.
+3.  **Optimisation Réseau Agressive** : Réduire au maximum le trafic réseau inutile.
+4.  **Persistance d'État Efficace** : Minimiser les étapes de connexion répétitives.
+
+## Workflow Proposé et Optimisations Spécifiques
+
+Voici le workflow détaillé et les optimisations attendues :
+
+### 1. Configuration Initiale et Pré-requis
+
+*   **Fichier `.env`** :
+    *   `LOW_RESOURCE_MODE=true` : **Crucial**. Cette option doit être activée pour lancer Chromium avec des arguments optimisés (désactivation du GPU, du cache partagé, des images, etc.). L'ingénieur devra s'assurer que ces arguments sont les plus agressifs possibles sans casser la fonctionnalité essentielle de la plateforme TTUEX.
+    *   `max_concurrent_accounts=1` : Pour les machines à faibles ressources, le traitement strictement séquentiel des comptes est préférable pour éviter la saturation de la RAM. Si des contextes de navigateur sont utilisés efficacement (voir ci-dessous), une valeur légèrement supérieure pourrait être envisagée après des tests de performance rigoureux.
+    *   `ENFORCE_MIN_RUN_PER_EXECUTION=false` : Si la vitesse est la priorité absolue, désactiver cette option pour que le script se termine dès que toutes les opérations sont effectuées, sans attendre un temps minimum arbitraire.
+*   **Fichier `accounts.json`** : Contient les identifiants de tous les comptes. Le chargement doit être rapide.
+
+### 2. Gestion du Navigateur et des Contextes (Cœur de l'Optimisation)
+
+C'est ici que l'ingénieur devra être le plus vigilant.
+
+*   **Lancement du Navigateur par Lot, Fermeture Immédiate** :
+    *   Le `cli.py` actuel implémente déjà un traitement par lots (batch_size=3). C'est une excellente base.
+    *   **Pour chaque lot d'accounts** :
+        *   Lancer **une seule instance** de `Browser` (Playwright). Cette instance doit être lancée avec les arguments de `LOW_RESOURCE_MODE`.
+        *   Une fois le lot traité, le `Browser` doit être **immédiatement fermé** (`browser.close()`) pour libérer toute la RAM associée. C'est déjà en place dans `cli.py` et doit être maintenu.
+*   **Contextes de Navigateur par Compte (dans le même Browser)** :
+    *   **Pour chaque compte au sein d'un lot** :
+        *   Au lieu de lancer un nouveau navigateur, créer un nouveau `BrowserContext` à partir de l'instance `Browser` unique du lot.
+        *   Chaque `BrowserContext` doit être isolé (cookies, localStorage, etc.) pour un compte spécifique.
+        *   Utiliser le `storage_state` (activé par `storage_state_enabled=true` dans `config.py`) pour charger l'état de session du compte. Cela évite la phase de login à chaque fois, ce qui est un gain de temps et de ressources considérable.
+        *   Créer une `Page` à partir de ce `BrowserContext`.
+        *   Une fois les opérations pour ce compte terminées, la `Page` et le `BrowserContext` doivent être **fermés et détruits** (`page.close()`, `context.close()`) pour libérer leurs ressources. C'est une étape critique pour éviter les fuites de mémoire.
+
+### 3. Optimisation des Opérations Web (dans `run_copy_trade_for_account`)
+
+*   **Blocage Agressif des Requêtes Réseau** :
+    *   Utiliser `page.route` de Playwright pour intercepter et bloquer toutes les requêtes inutiles : images, polices, médias, CSS (si `--hyper-performant` est activé), scripts tiers (analytics, trackers, publicités). L'ingénieur devra identifier précisément les types MIME et les domaines à bloquer.
+    *   Les flags `--performant` et `--hyper-performant` du CLI doivent être pleinement exploités et potentiellement étendus.
+*   **Sélecteurs Efficaces** :
+    *   Utiliser des sélecteurs CSS ou XPath les plus directs et performants possibles pour localiser les éléments sur la page. Éviter les sélecteurs trop génériques ou qui traversent inutilement le DOM.
+*   **Attentes Précises** :
+    *   Utiliser `page.wait_for_selector`, `page.wait_for_url`, `page.wait_for_load_state` avec des timeouts raisonnables. Éviter les `time.sleep()` arbitraires.
+*   **Gestion des Erreurs et Captures d'Écran de Débogage** :
+    *   En cas d'échec, capturer une capture d'écran et le HTML de la page (`save_debug_html=true`) pour faciliter le débogage, mais uniquement si `save_debug_html` est activé pour ne pas impacter la performance en production.
+
+### 4. Orchestration et Logique de Re-tentative
+
+*   **`orchestrator.py`** :
+    *   Doit s'assurer que `run_for_account` reçoit l'instance `Browser` du lot et est responsable de la création/fermeture du `BrowserContext` et de la `Page`.
+    *   La gestion des exceptions (`return_exceptions=True` dans `asyncio.gather`) est bonne pour ne pas arrêter tout le processus en cas d'échec d'un compte.
+*   **Logique de Re-tentative (`max_retries`)** :
+    *   La logique de re-tentative déjà présente dans `cli.py` pour `copy_trade` est essentielle. L'ingénieur devra s'assurer qu'elle est robuste et qu'elle ne mène pas à des boucles infinies ou à une consommation excessive de ressources en cas d'échecs persistants. Un délai exponentiel entre les tentatives est recommandé.
+
+### 5. Logging et Reporting
+
+*   **Logging Minimaliste** : Utiliser `structlog` avec un format `json` pour un logging efficace et structuré, mais garder le niveau de log (`log_level`) à `INFO` ou `WARNING` en production pour minimiser l'écriture sur disque et la consommation CPU.
+*   **Rapports Clairs** : Le résumé final doit être concis et indiquer clairement le succès ou l'échec pour chaque compte.
+
+## Résultat Attendu
+
+L'ingénieur devra livrer un système où :
+*   Le processus de copy trading pour N comptes s'exécute de manière fiable et complète.
+*   La consommation de RAM reste stable et ne croît pas de manière linéaire avec le nombre de comptes traités.
+*   Le temps d'exécution par compte est minimisé grâce aux optimisations réseau et de navigateur.
+*   Le système est résilient aux erreurs temporaires de la plateforme TTUEX.
+
+Ce document sert de guide pour la conception d'un workflow qui respecte les contraintes matérielles tout en atteignant les objectifs de performance et de fiabilité.
