@@ -33,15 +33,15 @@ async def orchestrate_accounts(
     Returns:
         A list of result dictionaries from each task.
     """
+    if not accounts:
+        return []
+        
     limit = max(1, min(int(max_concurrency or 1), 10))
-    logger.info(f"Starting orchestration for {len(accounts)} accounts with concurrency limit {limit}.")
-
     semaphore = asyncio.Semaphore(limit)
     tasks = []
 
     async def worker(account: AccountCredentials):
         async with semaphore:
-            logger.debug(f"Processing account: {account.account_name}")
             context = None
             try:
                 storage_state_path = None
@@ -50,17 +50,18 @@ async def orchestrate_accounts(
                     os.makedirs(storage_dir, exist_ok=True)
                     storage_state_path = os.path.join(storage_dir, f"{account.account_name}.json")
 
-                # Create a new context for each account
                 context = await adapter.new_context(
                     browser,
                     device=None,
                     performant=kwargs.get("performant", False),
                     storage_state_path=storage_state_path,
                 )
-                # Exceptions will be caught by asyncio.gather
+                
                 result = await run_for_account(account, browser, adapter, context, **kwargs)
-                logger.debug(f"Finished processing account: {account.account_name}")
                 return result
+            except Exception as e:
+                logger.error(f"Error in worker for account {account.account_name}: {e}")
+                raise
             finally:
                 if context:
                     await context.close()
@@ -68,8 +69,6 @@ async def orchestrate_accounts(
     for account in accounts:
         task = asyncio.create_task(worker(account))
         tasks.append(task)
-
-    # return_exceptions=True will cause gather to return exceptions as results
+    
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    logger.info(f"Orchestration completed for {len(accounts)} accounts.")
     return results

@@ -25,8 +25,8 @@ class AppConfig(BaseSettings):
     )
 
     # -- TTUEX Settings --
-    ttuex_login_url: str = Field(default="https://vip8-ttuex.com/login-page")
-    ttuex_base_url: str = Field(default="https://vip8-ttuex.com")
+    ttuex_login_url: str = Field(default="https://ttuex.club/login-page?redirect=/pc-home")
+    ttuex_base_url: str = Field(default="https://ttuex.club")
 
     # -- TTUEX Credentials (for single account mode, if used) --
     ttuex_username: Optional[str] = Field(
@@ -38,7 +38,7 @@ class AppConfig(BaseSettings):
 
     # -- Automation Settings --
     default_timeout: int = Field(
-        default=60000,
+        default=20000,
         description="Default timeout for Playwright operations in milliseconds",
     )
     follow_button_timeout: int = Field(
@@ -54,7 +54,16 @@ class AppConfig(BaseSettings):
     )
 
     save_debug_html: bool = Field(
-        default=False, description="Whether to save HTML content for debugging on failure."
+        default=True, description="Whether to save HTML content for debugging on failure."
+    )
+
+    # -- Follow Order Click Behavior --
+    follow_order_click_attempts: int = Field(
+        default=1,
+        description=(
+            "Number of times to attempt clicking the 'Suivi des commandes' (Follow Order) button "
+            "before checking for success. Useful if the site requires multiple clicks."
+        ),
     )
 
     # -- Execution Duration Control --
@@ -116,7 +125,7 @@ class AppConfig(BaseSettings):
         description="Selector for the password input on the login page.",
     )
     selector_login_submit_button: str = Field(
-        default='button[type="submit"]:has-text("Se connecter")',
+        default='button[type="submit"]',
         description="Selector for the login submit button.",
     )
 
@@ -128,17 +137,25 @@ class AppConfig(BaseSettings):
 
     # Contract/Trade Page
     selector_contract_copy_trading_button: str = Field(
-        default='#root > div > div > div.max-w-full.mx-auto.px-2.md\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.tradechangebar-1.bg-bitfinex-background.px-4.py-3.overflow-x-auto > div.tradechangebar-2 > div:nth-child(4) > div > span',
+        default='span:has-text("Copy trading")',
         description="Selector for the 'Copy trading' button on the contract page.",
     )
     selector_contract_order_number_input: str = Field(
-        default='#root > div > div > div.max-w-full.mx-auto.px-2.md\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.overflow-x-hidden.mb-8.bg-bitfinex-background.px-4.py-3 > div > div:nth-child(1) > div > div.tradelistruning-8 > div > div > input',
+        default='#root > div > div > div.max-w-full.mx-auto.px-2.md\\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.overflow-x-hidden.mb-8.bg-bitfinex-background.px-4.py-3 > div > div:nth-child(1) > div > div.tradelistruning-8 > div > div > input',
         description="Selector for the order number input field in copy trading.",
     )
+
+
     selector_contract_follow_order_button: str = Field(
-        default='#root > div > div > div.max-w-full.mx-auto.px-2.md\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.overflow-x-hidden.mb-8.bg-bitfinex-background.px-4.py-3 > div > div:nth-child(1) > div > div.tradelistruning-8 > div > button',
+        default='button:has-text("Suivi des commandes")',
         description="Selector for the 'Follow Order' or 'Copy' button.",
     )
+
+    selector_follow_up_status_message: str = Field(
+        default='#root > div > div > div.max-w-full.mx-auto.px-2.md\\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.fixed.inset-0.bg-black\\/50.flex.items-center.justify-center.z-50 > div > p:has-text("suivi réussi"), #root > div > div > div.max-w-full.mx-auto.px-2.md\\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.fixed.inset-0.bg-black\\/50.flex.items-center.justify-center.z-50 > div > p:has-text("successful followed")',
+        description="Selector for the success message that appears after following an order.",
+    )
+
 
     # History Page
     selector_history_item: str = Field(
@@ -146,8 +163,24 @@ class AppConfig(BaseSettings):
         description="Selector for a specific item in the trade history, formatted with 'partial_order_id'.",
     )
     selector_order_status_toast: str = Field(
-        default='div.adm-toast-main-text:has-text("This Order has completed Or not exist！")',
+        default='div[class*="toast"], div[class*="notification"], div[class*="alert"]',
         description="Selector for the toast message indicating order status (completed or not exist).",
+    )
+    
+    # Order Alert Modal
+    selector_order_alert_modal: str = Field(
+        default='#root > div > div > div.max-w-full.mx-auto.px-2.md\\:px-4.pb-16 > div > div > div.col-span-9.space-y-4 > div:nth-child(3) > div.border-t.border-bitfinex-border > div > div.fixed.inset-0.bg-black\\/50.flex.items-center.justify-center.z-50 > div',
+        description="Selector for the order alert modal container that appears after clicking follow order.",
+    )
+    
+    selector_order_alert_button: str = Field(
+        default='button:has-text("déterminer"), button:has-text("OK"), button:has-text("Confirmer")',
+        description="Selector for the specific 'déterminer' button in the order alert modal.",
+    )
+    
+    selector_order_alert_message: str = Field(
+        default='div[class*="alert-content"], div[class*="modal-content"], div[class*="popup-content"], div[role="dialog"] p, div[role="dialog"] span',
+        description="Selector for the order alert message content within the modal.",
     )
 
     # -- Webhook Server Settings --

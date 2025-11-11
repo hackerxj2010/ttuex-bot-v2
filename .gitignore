@@ -8,6 +8,9 @@ env/
 .venv/
 venv/
 .pytest_cache/
+*.egg-info/
+dist/
+build/
 
 # Editor/IDE
 .vscode/
@@ -19,7 +22,24 @@ venv/
 # Sensitive files
 .env
 accounts.json
+bot.session
+*.session
+authorized_users.json
 
 # Playwright artifacts
 screenshots/
 debug_*.html
+debug_*.png
+storage_states/
+*.lock
+bot.lock
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

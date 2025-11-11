@@ -171,6 +171,7 @@ The bot's behavior can be fine-tuned through the `.env` file:
 *   `MAX_CONCURRENT_ACCOUNTS`: The number of accounts to process in parallel.
 *   `LOW_RESOURCE_MODE`: Enables optimizations for low-resource environments.
 *   `STORAGE_STATE_ENABLED`: Set to `true` to cache browser sessions and avoid re-logins.
+*   `FOLLOW_ORDER_CLICK_ATTEMPTS`: Number of times to click the "Suivi des commandes" button before checking success.
 
 For a full list of configuration options, see the `AppConfig` class in `src/ttuex_bot/config.py`.
 
